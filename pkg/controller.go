@@ -40,7 +40,7 @@ type ExternalIpController struct {
 	manager   ipmanager.Manager
 }
 
-func NewExternalIpController(config *rest.Config, uid, iface, mask string, ipmanagerInst ipmanager.Manager) (*ExternalIpController, error) {
+func NewExternalIpController(config *rest.Config, uid, iface, mask string, ipmanagerInst ipmanager.Manager, queue workqueue.QueueType) (*ExternalIpController, error) {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
@@ -48,6 +48,10 @@ func NewExternalIpController(config *rest.Config, uid, iface, mask string, ipman
 
 	if ipmanagerInst == nil {
 		ipmanagerInst = &ipmanager.Noop{}
+	}
+
+	if queue == nil {
+		queue = workqueue.NewQueue()
 	}
 
 	lw := &cache.ListWatch{
@@ -64,7 +68,7 @@ func NewExternalIpController(config *rest.Config, uid, iface, mask string, ipman
 		Mask:      mask,
 		source:    lw,
 		ipHandler: netutils.LinuxIPHandler{},
-		Queue:     workqueue.NewQueue(),
+		Queue:     queue,
 		manager:   ipmanagerInst,
 	}, nil
 }

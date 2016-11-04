@@ -23,6 +23,8 @@ import (
 	"k8s.io/client-go/1.5/tools/clientcmd"
 
 	externalip "github.com/Mirantis/k8s-externalipcontroller/pkg"
+	"github.com/Mirantis/k8s-externalipcontroller/pkg/ipmanager"
+	"github.com/Mirantis/k8s-externalipcontroller/pkg/workqueue"
 )
 
 type FlagArray []string
@@ -32,11 +34,17 @@ func (f *FlagArray) Set(v string) error {
 	return nil
 }
 
+func (f *FlagArray) String() string {
+	return "etcd"
+}
+
 func main() {
 	iface := flag.String("iface", "eth0", "Link where ips will be assigned")
 	mask := flag.String("mask", "32", "mask part of the cidr")
 	kubeconfig := flag.String("kubeconfig", "", "kubeconfig to use with kubernetes client")
 	ipmanagerType := flag.String("ipmanager", "noop", "choose noop or fair")
+	var etcdEndpoints FlagArray
+	flag.Var(&etcdEndpoints, "etcd", "provide endpoints for etcd")
 	flag.Parse()
 
 	glog.V(4).Infof("Starting external ip controller using link: %s and mask: /%s", *iface, *mask)
@@ -61,7 +69,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	c, err := externalip.NewExternalIpController(config, host, *iface, *mask, nil)
+	queue := workqueue.NewQueue()
+	var manager ipmanager.Manager
+	switch *ipmanagerType {
+	case "fair":
+		manager, err = ipmanager.NewFairEtcd(etcdEndpoints, stopCh, queue)
+		if err != nil {
+			glog.Errorf("Failed to create fair manager. err %v", err)
+			os.Exit(1)
+		}
+	}
+
+	c, err := externalip.NewExternalIpController(config, host, *iface, *mask, manager, queue)
 	if err != nil {
 		glog.Errorf("Controller crashed with %v\n", err)
 		os.Exit(1)
